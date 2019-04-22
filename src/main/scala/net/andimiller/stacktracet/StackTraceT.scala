@@ -48,4 +48,27 @@ object StackTraceT {
     }
   }
 
+  implicit def stackTraceTConcurrentEffect[F[_]](implicit F: Sync[F], CE: ConcurrentEffect[F]) = new ConcurrentEffect[StackTraceT[F, ?]] {
+    val S = implicitly[Sync[StackTraceT[F, ?]]]
+
+    override def runCancelable[A](fa: StackTraceT[F, A])(cb: Either[Throwable, A] => IO[Unit]): SyncIO[CancelToken[StackTraceT[F, ?]]] = ???
+    override def start[A](fa: StackTraceT[F, A]): StackTraceT[F, Fiber[StackTraceT[F, ?], A]] = ???
+    override def racePair[A, B](fa: StackTraceT[F, A], fb: StackTraceT[F, B]): StackTraceT[F, Either[(A, Fiber[StackTraceT[F, ?], B]), (Fiber[StackTraceT[F, ?], A], B)]] = ???
+    override def runAsync[A](fa: StackTraceT[F, A])(cb: Either[Throwable, A] => IO[Unit]): SyncIO[Unit] =
+      CE.runAsync(fa.run(List.empty))(cb.compose(_.map(_._2)))
+    override def async[A](k: (Either[Throwable, A] => Unit) => Unit): StackTraceT[F, A] =
+      StateT.liftF(CE.async(k))
+    override def asyncF[A](k: (Either[Throwable, A] => Unit) => StackTraceT[F, Unit]): StackTraceT[F, A] =
+      CE.asyncF(k.andThen(_.run(List.empty)))
+
+    // from Sync
+    override def suspend[A](thunk: => StackTraceT[F, A]): StackTraceT[F, A] = S.suspend(thunk)
+    override def bracketCase[A, B](acquire: StackTraceT[F, A])(use: A => StackTraceT[F, B])(release: (A, ExitCase[Throwable]) => StackTraceT[F, Unit]): StackTraceT[F, B] = S.bracketCase(acquire)(use)(release)
+    override def flatMap[A, B](fa: StackTraceT[F, A])(f: A => StackTraceT[F, B]): StackTraceT[F, B] = S.flatMap(fa)(f)
+    override def tailRecM[A, B](a: A)(f: A => StackTraceT[F, Either[A, B]]): StackTraceT[F, B] = S.tailRecM(a)(f)
+    override def raiseError[A](e: Throwable): StackTraceT[F, A] = S.raiseError(e)
+    override def handleErrorWith[A](fa: StackTraceT[F, A])(f: Throwable => StackTraceT[F, A]): StackTraceT[F, A] = S.handleErrorWith(fa)(f)
+    override def pure[A](x: A): StackTraceT[F, A] = S.pure(x)
+  }
+
 }
